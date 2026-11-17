@@ -1,0 +1,286 @@
+import pygame
+import math
+import sys
+
+pygame.init()
+
+# ---------- Screen ----------
+WIDTH, HEIGHT = 980, 620
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Car Football")
+clock = pygame.time.Clock()
+
+# ---------- Font ----------
+font = pygame.font.SysFont(None, 40)
+small_font = pygame.font.SysFont(None, 26)
+
+# ---------- Field ----------
+FIELD = pygame.Rect(100, 80, 780, 460)
+GOAL_TOP = FIELD.top + 120
+GOAL_BOTTOM = FIELD.bottom - 120
+
+# ---------- Cars ----------
+CAR_OPTIONS = [
+    {"name": "Racer X", "speed": 5.8, "power": 5.8, "color": (255, 110, 110)},
+    {"name": "Turbo", "speed": 6.5, "power": 5.2, "color": (110, 180, 255)},
+    {"name": "Drifter", "speed": 5.5, "power": 6.5, "color": (120, 220, 120)},
+    {"name": "Storm", "speed": 6.8, "power": 5.0, "color": (255, 200, 80)},
+    {"name": "Titan", "speed": 5.2, "power": 7.3, "color": (190, 120, 255)}
+]
+
+# ---------- Car Class ----------
+class Car:
+    def __init__(self, x, y, color, speed, is_player=False):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.speed = speed
+        self.is_player = is_player
+        self.w = 60
+        self.h = 34
+        self.vx = 0
+        self.vy = 0
+        self.boost = 100
+
+    def update_player(self, dt):
+        keys = pygame.key.get_pressed()
+        move_x = (keys[pygame.K_d] or keys[pygame.K_RIGHT]) - (keys[pygame.K_a] or keys[pygame.K_LEFT])
+        move_y = (keys[pygame.K_s] or keys[pygame.K_DOWN]) - (keys[pygame.K_w] or keys[pygame.K_UP])
+
+        boosting = keys[pygame.K_SPACE] and self.boost > 0 and (move_x != 0 or move_y != 0)
+
+        if move_x != 0 or move_y != 0:
+            length = math.hypot(move_x, move_y)
+            drive_speed = self.speed * (1.8 if boosting else 1.0)
+
+            self.vx = (move_x / length) * drive_speed * 60 * dt
+            self.vy = (move_y / length) * drive_speed * 60 * dt
+
+            if boosting:
+                self.boost = max(0, self.boost - 45 * dt)
+            else:
+                self.boost = min(100, self.boost + 25 * dt)
+        else:
+            self.vx *= 0.85
+            self.vy *= 0.85
+            self.boost = min(100, self.boost + 25 * dt)
+
+        self.x += self.vx
+        self.y += self.vy
+
+        self.x = max(FIELD.left + 30, min(FIELD.right - 30, self.x))
+        self.y = max(FIELD.top + 20, min(FIELD.bottom - 20, self.y))
+
+    def update_ai(self, dt, ball):
+        dx = ball.x - self.x
+        dy = ball.y - self.y
+        dist = math.hypot(dx, dy)
+        if dist > 0:
+            if dist > 120:
+                speed_mult = 1.0
+            else:
+                speed_mult = 0.7
+
+            self.vx = (dx / dist) * self.speed * 60 * dt * speed_mult
+            self.vy = (dy / dist) * self.speed * 60 * dt * speed_mult
+
+            self.x += self.vx
+            self.y += self.vy
+
+        self.x = max(FIELD.left + 30, min(FIELD.right - 30, self.x))
+        self.y = max(FIELD.top + 20, min(FIELD.bottom - 20, self.y))
+
+    def draw(self):
+        rect = pygame.Rect(self.x - self.w / 2, self.y - self.h / 2, self.w, self.h)
+        pygame.draw.rect(screen, self.color, rect, border_radius=12)
+
+# ---------- Ball Class ----------
+class Ball:
+    def __init__(self):
+        self.x = FIELD.centerx
+        self.y = FIELD.centery
+        self.r = 12
+        self.vx = 0
+        self.vy = 0
+
+    def reset(self):
+        self.x = FIELD.centerx
+        self.y = FIELD.centery
+        self.vx = 0
+        self.vy = 0
+
+    def apply_collision(self, car):
+        dx = self.x - car.x
+        dy = self.y - car.y
+        near_x = (car.w / 2 + self.r) - abs(dx)
+        near_y = (car.h / 2 + self.r) - abs(dy)
+
+        if near_x > 0 and near_y > 0:
+            if near_x < near_y:
+                self.x += (1 if dx > 0 else -1) * (near_x + 2)
+                self.vx += (car.vx * 0.9) + (1 if dx > 0 else -1) * 2.5
+            else:
+                self.y += (1 if dy > 0 else -1) * (near_y + 2)
+                self.vy += (car.vy * 0.9) + (1 if dy > 0 else -1) * 2.5
+
+    def update(self):
+        self.x += self.vx
+        self.y += self.vy
+
+        self.vx *= 0.995
+        self.vy *= 0.995
+
+        if self.y < FIELD.top + self.r:
+            self.y = FIELD.top + self.r
+            self.vy = abs(self.vy) * 0.9
+        if self.y > FIELD.bottom - self.r:
+            self.y = FIELD.bottom - self.r
+            self.vy = -abs(self.vy) * 0.9
+
+        if self.x < FIELD.left + self.r:
+            if GOAL_TOP < self.y < GOAL_BOTTOM:
+                return "left_goal"
+            self.x = FIELD.left + self.r
+            self.vx = abs(self.vx) * 0.9
+
+        if self.x > FIELD.right - self.r:
+            if GOAL_TOP < self.y < GOAL_BOTTOM:
+                return "right_goal"
+            self.x = FIELD.right - self.r
+            self.vx = -abs(self.vx) * 0.9
+
+        return None
+
+    def draw(self):
+        pygame.draw.circle(screen, (255, 255, 255), (int(self.x), int(self.y)), self.r)
+
+# ---------- Menu ----------
+def draw_menu():
+    screen.fill((10, 20, 30))
+    title = font.render("Choose Your Car", True, (255, 255, 255))
+    screen.blit(title, (330, 50))
+
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+
+    for i, car in enumerate(CAR_OPTIONS):
+        x = 60 + i * 180
+        y = 150
+        w = 150
+        h = 260
+
+        hover = x < mouse_x < x + w and y < mouse_y < y + h
+        box_color = (60, 90, 120) if hover else (40, 60, 80)
+
+        pygame.draw.rect(screen, box_color, (x, y, w, h), border_radius=12)
+        pygame.draw.rect(screen, car["color"], (x + 20, y + 20, 110, 100), border_radius=12)
+
+        name = small_font.render(car["name"], True, (255, 255, 255))
+        speed = small_font.render(f"Speed: {car['speed']}", True, (255, 255, 255))
+        power = small_font.render(f"Power: {car['power']}", True, (255, 255, 255))
+
+        screen.blit(name, (x + 18, y + 140))
+        screen.blit(speed, (x + 18, y + 170))
+        screen.blit(power, (x + 18, y + 195))
+
+        if hover:
+            pygame.draw.rect(screen, (255, 255, 255), (x, y, w, h), 3, border_radius=12)
+
+    instruction = small_font.render("Click a car to start", True, (200, 220, 255))
+    screen.blit(instruction, (360, 520))
+
+# ---------- Game ----------
+def start_game(selected_car):
+    player = Car(FIELD.centerx - 250, FIELD.centery, selected_car["color"], selected_car["speed"], True)
+    enemy1 = Car(FIELD.centerx + 220, FIELD.centery - 85, (255, 100, 100), 5.4)
+    enemy2 = Car(FIELD.centerx + 220, FIELD.centery + 85, (120, 200, 120), 5.0)
+    ball = Ball()
+
+    score = [0, 0]
+    timer = 60.0
+
+    while True:
+        dt = clock.tick(60) / 1000.0
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+        player.update_player(dt)
+        enemy1.update_ai(dt, ball)
+        enemy2.update_ai(dt, ball)
+
+        ball.apply_collision(player)
+        ball.apply_collision(enemy1)
+        ball.apply_collision(enemy2)
+
+        goal = ball.update()
+
+        if goal == "left_goal":
+            score[1] += 1
+            ball.reset()
+            player.x = FIELD.centerx - 250
+            player.y = FIELD.centery
+            enemy1.x = FIELD.centerx + 220
+            enemy1.y = FIELD.centery - 85
+            enemy2.x = FIELD.centerx + 220
+            enemy2.y = FIELD.centery + 85
+        elif goal == "right_goal":
+            score[0] += 1
+            ball.reset()
+            player.x = FIELD.centerx - 250
+            player.y = FIELD.centery
+            enemy1.x = FIELD.centerx + 220
+            enemy1.y = FIELD.centery - 85
+            enemy2.x = FIELD.centerx + 220
+            enemy2.y = FIELD.centery + 85
+
+        timer -= dt
+        if timer <= 0:
+            break
+
+        screen.fill((34, 120, 60))
+        pygame.draw.rect(screen, (40, 90, 55), FIELD)
+
+        pygame.draw.line(screen, (255, 255, 255), (FIELD.centerx, FIELD.top), (FIELD.centerx, FIELD.bottom), 3)
+        pygame.draw.ellipse(screen, (255, 255, 255), pygame.Rect(FIELD.centerx - 90, FIELD.centery - 90, 180, 180), 3)
+        pygame.draw.rect(screen, (255, 255, 255), (FIELD.left, GOAL_TOP, 15, GOAL_BOTTOM - GOAL_TOP), 3)
+        pygame.draw.rect(screen, (255, 255, 255), (FIELD.right - 15, GOAL_TOP, 15, GOAL_BOTTOM - GOAL_TOP), 3)
+
+        player.draw()
+        enemy1.draw()
+        enemy2.draw()
+        ball.draw()
+
+        score_text = font.render(f"{score[0]} : {score[1]}", True, (255, 255, 255))
+        screen.blit(score_text, (450, 20))
+
+        timer_text = small_font.render(f"Time: {int(timer)}s", True, (255, 255, 255))
+        screen.blit(timer_text, (850, 25))
+
+        pygame.draw.rect(screen, (40, 40, 40), (20, 20, 120, 18))
+        pygame.draw.rect(screen, (50, 180, 255), (20, 20, int(120 * player.boost / 100), 18))
+        screen.blit(small_font.render("BOOST", True, (255, 255, 255)), (20, 42))
+
+        pygame.display.flip()
+
+# ---------- Main loop ----------
+while True:
+    draw_menu()
+    pygame.display.flip()
+
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            mx, my = event.pos
+            for i, car in enumerate(CAR_OPTIONS):
+                x = 60 + i * 180
+                y = 150
+                w = 150
+                h = 260
+
+                if x < mx < x + w and y < my < y + h:
+                    start_game(car)
+                    break
