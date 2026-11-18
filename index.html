@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>3D Car Football</title>
   <style>
     body {
@@ -13,28 +13,26 @@
       font-family: Arial, sans-serif;
     }
 
-    canvas {
-      display: block;
-    }
+    canvas { display: block; }
 
     #hud {
       position: fixed;
+      z-index: 2;
       top: 12px;
       left: 12px;
-      z-index: 2;
-      background: #102030cc;
-      padding: 12px 16px;
+      padding: 12px;
       border-radius: 10px;
+      background: #102030dd;
       line-height: 1.6;
     }
 
     #boostOuter {
       width: 180px;
-      height: 15px;
-      background: #333;
+      height: 14px;
+      overflow: hidden;
       border: 1px solid white;
       border-radius: 8px;
-      overflow: hidden;
+      background: #333;
     }
 
     #boostBar {
@@ -49,17 +47,14 @@
       z-index: 5;
       display: flex;
       flex-direction: column;
-      justify-content: center;
       align-items: center;
+      justify-content: center;
+      padding: 20px;
       background: #101923ee;
       text-align: center;
-      padding: 20px;
     }
 
-    #menu h1 {
-      font-size: 42px;
-      margin-bottom: 5px;
-    }
+    #menu h1 { font-size: 40px; }
 
     #cars {
       display: flex;
@@ -67,21 +62,15 @@
       justify-content: center;
       gap: 12px;
       max-width: 700px;
-      margin-top: 16px;
     }
 
     button {
-      color: white;
+      padding: 14px 20px;
       border: 3px solid white;
       border-radius: 12px;
-      padding: 14px 20px;
+      color: white;
       font-size: 18px;
       cursor: pointer;
-    }
-
-    button:hover {
-      filter: brightness(1.25);
-      transform: scale(1.04);
     }
   </style>
 </head>
@@ -91,7 +80,8 @@
     <span id="score">0 - 0</span> &nbsp; <span id="timer">Time: 90</span><br>
     Boost
     <div id="boostOuter"><div id="boostBar"></div></div>
-    Drive: W/S or ↑/↓ &nbsp; Turn: A/D or ←/→ &nbsp; Boost: Space
+    Drive: W/S or ↑/↓ &nbsp; Turn: A/D or ←/→<br>
+    Boost: Space &nbsp; Jump: J or K
   </div>
 
   <div id="menu">
@@ -109,12 +99,12 @@
     scene.fog = new THREE.Fog(0x87ceeb, 90, 180);
 
     const camera = new THREE.PerspectiveCamera(
-      65, window.innerWidth / window.innerHeight, 0.1, 300
+      65, innerWidth / innerHeight, 0.1, 300
     );
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     document.body.appendChild(renderer.domElement);
 
@@ -129,7 +119,6 @@
     const fieldDepth = 50;
     const goalHalfWidth = 7;
 
-    // Grass field
     const grass = new THREE.Mesh(
       new THREE.PlaneGeometry(fieldWidth, fieldDepth),
       new THREE.MeshStandardMaterial({ color: 0x278447, roughness: 0.9 })
@@ -138,8 +127,7 @@
     grass.receiveShadow = true;
     scene.add(grass);
 
-    // Field markings
-    function line(x, z, width, depth) {
+    function addLine(x, z, width, depth) {
       const mesh = new THREE.Mesh(
         new THREE.BoxGeometry(width, 0.04, depth),
         new THREE.MeshBasicMaterial({ color: 0xffffff })
@@ -148,57 +136,47 @@
       scene.add(mesh);
     }
 
-    line(0, 0, 0.15, fieldDepth);
-    line(-fieldWidth / 2, 0, 0.2, fieldDepth);
-    line(fieldWidth / 2, 0, 0.2, fieldDepth);
-    line(0, -fieldDepth / 2, fieldWidth, 0.2);
-    line(0, fieldDepth / 2, fieldWidth, 0.2);
+    addLine(0, 0, 0.15, fieldDepth);
+    addLine(-fieldWidth / 2, 0, 0.2, fieldDepth);
+    addLine(fieldWidth / 2, 0, 0.2, fieldDepth);
+    addLine(0, -fieldDepth / 2, fieldWidth, 0.2);
+    addLine(0, fieldDepth / 2, fieldWidth, 0.2);
 
     const centerCircle = new THREE.Mesh(
       new THREE.RingGeometry(7.7, 8, 48),
-      new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        side: THREE.DoubleSide
+      })
     );
     centerCircle.rotation.x = -Math.PI / 2;
     centerCircle.position.y = 0.04;
     scene.add(centerCircle);
 
-    // Goals: the player scores at the right-hand goal.
     function makeGoal(x, color) {
       const material = new THREE.MeshStandardMaterial({ color });
 
       for (const z of [-goalHalfWidth, goalHalfWidth]) {
         const post = new THREE.Mesh(
-          new THREE.BoxGeometry(1, 5, 0.6), material
+          new THREE.BoxGeometry(1, 5, 0.6),
+          material
         );
         post.position.set(x, 2.5, z);
         post.castShadow = true;
         scene.add(post);
       }
 
-      const bar = new THREE.Mesh(
+      const crossbar = new THREE.Mesh(
         new THREE.BoxGeometry(1, 0.6, goalHalfWidth * 2),
         material
       );
-      bar.position.set(x, 5, 0);
-      bar.castShadow = true;
-      scene.add(bar);
-
-      const back = new THREE.Mesh(
-        new THREE.BoxGeometry(0.3, 5, goalHalfWidth * 2),
-        new THREE.MeshStandardMaterial({
-          color,
-          transparent: true,
-          opacity: 0.25
-        })
-      );
-      back.position.set(x + (x > 0 ? 4 : -4), 2.5, 0);
-      scene.add(back);
+      crossbar.position.set(x, 5, 0);
+      scene.add(crossbar);
     }
 
     makeGoal(-fieldWidth / 2, 0xff5555);
     makeGoal(fieldWidth / 2, 0x3399ff);
 
-    // Big football
     const ball = new THREE.Mesh(
       new THREE.SphereGeometry(1.5, 24, 18),
       new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.65 })
@@ -237,7 +215,6 @@
       cabin.castShadow = true;
       car.add(cabin);
 
-      // Four wheels
       for (const x of [-1.25, 1.25]) {
         for (const z of [-1.25, 1.25]) {
           const wheel = new THREE.Mesh(
@@ -246,12 +223,10 @@
           );
           wheel.rotation.x = Math.PI / 2;
           wheel.position.set(x, 0.65, z);
-          wheel.castShadow = true;
           car.add(wheel);
         }
       }
 
-      // Bright nose shows which way the car is facing.
       const nose = new THREE.Mesh(
         new THREE.BoxGeometry(0.35, 0.35, 0.5), dark
       );
@@ -274,6 +249,8 @@
     let enemy;
     let playerSpeed = 25;
     let boost = 100;
+    let jumpVelocity = 0;
+    let grounded = true;
     let playerScore = 0;
     let enemyScore = 0;
     let timeLeft = 90;
@@ -285,27 +262,28 @@
     const menuText = document.getElementById("menuText");
 
     function showCarButtons() {
-      const carBox = document.getElementById("cars");
-      carBox.innerHTML = "";
+      const box = document.getElementById("cars");
+      box.innerHTML = "";
 
       for (const choice of carChoices) {
         const button = document.createElement("button");
         button.textContent = choice.name;
-        button.style.background = "#" + choice.color.toString(16).padStart(6, "0");
+        button.style.background =
+          "#" + choice.color.toString(16).padStart(6, "0");
         button.onclick = () => startGame(choice);
-        carBox.appendChild(button);
+        box.appendChild(button);
       }
     }
 
     function resetPositions() {
       player.position.set(-22, 0, 0);
       player.rotation.y = 0;
-
       enemy.position.set(22, 0, 0);
       enemy.rotation.y = Math.PI;
-
       ball.position.set(0, 1.5, 0);
       ballVelocity.set(0, 0, 0);
+      jumpVelocity = 0;
+      grounded = true;
     }
 
     function startGame(choice) {
@@ -315,7 +293,6 @@
       player = makeCar(choice.color);
       enemy = makeCar(0xff7733);
       playerSpeed = choice.speed;
-
       playerScore = 0;
       enemyScore = 0;
       timeLeft = 90;
@@ -327,10 +304,26 @@
       updateHud();
     }
 
+    function updateHud() {
+      document.getElementById("score").textContent =
+        `${playerScore} - ${enemyScore}`;
+      document.getElementById("timer").textContent =
+        `Time: ${Math.ceil(timeLeft)}`;
+      document.getElementById("boostBar").style.width = `${boost}%`;
+    }
+
     showCarButtons();
 
     window.addEventListener("keydown", (event) => {
-      keys[event.key.toLowerCase()] = true;
+      const key = event.key.toLowerCase();
+      keys[key] = true;
+
+      if ((key === "j" || key === "k") &&
+          !event.repeat && playing && grounded) {
+        jumpVelocity = 12;
+        grounded = false;
+      }
+
       if (event.key.startsWith("Arrow") || event.key === " ") {
         event.preventDefault();
       }
@@ -350,56 +343,33 @@
       );
 
       car.position.addScaledVector(direction, forward * speed * dt);
-
       car.position.x = THREE.MathUtils.clamp(
         car.position.x, -fieldWidth / 2 + 3, fieldWidth / 2 - 3
       );
       car.position.z = THREE.MathUtils.clamp(
         car.position.z, -fieldDepth / 2 + 3, fieldDepth / 2 - 3
       );
-
-      return direction;
     }
 
     function hitBall(car, power) {
       const dx = ball.position.x - car.position.x;
       const dz = ball.position.z - car.position.z;
       const distance = Math.hypot(dx, dz);
-      const touchDistance = 4.4;
 
-      if (distance < touchDistance) {
+      // Cars can hit the ball while on the ground or in the air.
+      if (distance < 4.4 && ball.position.y < car.position.y + 4.5) {
         const nx = dx / (distance || 1);
         const nz = dz / (distance || 1);
-        ball.position.x = car.position.x + nx * touchDistance;
-        ball.position.z = car.position.z + nz * touchDistance;
+        ball.position.x = car.position.x + nx * 4.4;
+        ball.position.z = car.position.z + nz * 4.4;
         ballVelocity.x += nx * power;
         ballVelocity.z += nz * power;
         ballVelocity.y += 2;
       }
     }
 
-    function updateHud() {
-      document.getElementById("score").textContent =
-        `${playerScore} - ${enemyScore}`;
-      document.getElementById("timer").textContent =
-        `Time: ${Math.ceil(timeLeft)}`;
-      document.getElementById("boostBar").style.width = `${boost}%`;
-    }
-
-    function scoreGoal(playerScored) {
-      if (playerScored) playerScore++;
-      else enemyScore++;
-
+    function resetBall() {
       resetPositions();
-      updateHud();
-    }
-
-    function finishGame() {
-      playing = false;
-      menuTitle.textContent = "Time's up!";
-      menuText.textContent =
-        `Final score: ${playerScore} - ${enemyScore}. Choose a car to play again!`;
-      menu.style.display = "flex";
     }
 
     function update(dt) {
@@ -408,7 +378,11 @@
       timeLeft -= dt;
       if (timeLeft <= 0) {
         timeLeft = 0;
-        finishGame();
+        playing = false;
+        menuTitle.textContent = "Time's up!";
+        menuText.textContent =
+          `Final score: ${playerScore} - ${enemyScore}. Choose a car to play again!`;
+        menu.style.display = "flex";
         return;
       }
 
@@ -426,16 +400,29 @@
       if (boosting) boost = Math.max(0, boost - 35 * dt);
       else boost = Math.min(100, boost + 18 * dt);
 
-      const playerDirection = moveCar(player, forward, turn, speed, dt);
+      moveCar(player, forward, turn, speed, dt);
+
+      // Jump physics: J or K jumps; gravity brings the car back down.
+      if (!grounded) {
+        jumpVelocity -= 30 * dt;
+        player.position.y += jumpVelocity * dt;
+
+        if (player.position.y <= 0) {
+          player.position.y = 0;
+          jumpVelocity = 0;
+          grounded = true;
+        }
+      }
+
       hitBall(player, boosting ? 34 : 24);
 
-      // Simple opponent: turn toward the ball and drive at it.
+      // Simple opponent AI drives toward the ball.
       const toBallX = ball.position.x - enemy.position.x;
       const toBallZ = ball.position.z - enemy.position.z;
       const targetAngle = Math.atan2(-toBallZ, toBallX);
-      let angleDifference = targetAngle - enemy.rotation.y;
-      angleDifference = Math.atan2(
-        Math.sin(angleDifference), Math.cos(angleDifference)
+      const angleDifference = Math.atan2(
+        Math.sin(targetAngle - enemy.rotation.y),
+        Math.cos(targetAngle - enemy.rotation.y)
       );
 
       enemy.rotation.y += THREE.MathUtils.clamp(
@@ -448,7 +435,6 @@
       ball.position.x += ballVelocity.x * dt;
       ball.position.z += ballVelocity.z * dt;
       ball.position.y += ballVelocity.y * dt;
-
       ballVelocity.y -= 18 * dt;
       ballVelocity.x *= Math.pow(0.985, dt * 60);
       ballVelocity.z *= Math.pow(0.985, dt * 60);
@@ -469,17 +455,17 @@
         ballVelocity.z *= -0.75;
       }
 
-      // Goals are at the left and right ends.
       if (ball.position.x > halfX &&
           Math.abs(ball.position.z) < goalHalfWidth &&
           ball.position.y < 5) {
-        scoreGoal(true);
+        playerScore++;
+        resetBall();
       } else if (ball.position.x < -halfX &&
           Math.abs(ball.position.z) < goalHalfWidth &&
           ball.position.y < 5) {
-        scoreGoal(false);
+        enemyScore++;
+        resetBall();
       } else {
-        // Bounce off the end walls when not inside a goal.
         if (ball.position.x > halfX - 1.5 &&
             Math.abs(ball.position.z) >= goalHalfWidth) {
           ball.position.x = halfX - 1.5;
@@ -493,44 +479,44 @@
         }
       }
 
-      // Follow behind the player's car.
+      // Camera follows behind the player's car.
       const behind = new THREE.Vector3(
         -Math.cos(player.rotation.y), 0, Math.sin(player.rotation.y)
       );
-
-      const cameraTarget = player.position.clone();
-      cameraTarget.y += 2;
-
       const cameraPosition = player.position.clone()
         .addScaledVector(behind, 13);
       cameraPosition.y += 8;
+
       camera.position.lerp(cameraPosition, 1 - Math.pow(0.001, dt));
-      camera.lookAt(cameraTarget);
+      camera.lookAt(
+        player.position.x,
+        player.position.y + 2,
+        player.position.z
+      );
 
       updateHud();
     }
 
+    const clock = new THREE.Clock();
+
     function animate() {
       requestAnimationFrame(animate);
       const dt = Math.min(clock.getDelta(), 0.04);
-
       update(dt);
       renderer.render(scene, camera);
     }
 
-    const clock = new THREE.Clock();
-
-    // Starting view before a car is selected.
     camera.position.set(-35, 35, 45);
     camera.lookAt(0, 0, 0);
 
     window.addEventListener("resize", () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.aspect = innerWidth / innerHeight;
       camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(innerWidth, innerHeight);
     });
 
     animate();
   </script>
 </body>
 </html>
+```**Controls:** W/S drive, A/D turn, Space boost, and **J or K jump**.
